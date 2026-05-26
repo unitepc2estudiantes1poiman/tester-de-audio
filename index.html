@@ -2,6 +2,7 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TESTER DE AUDIO EN VIVO</title>
     <style>
         body { 
@@ -11,6 +12,7 @@
             display: flex; 
             justify-content: center; 
             padding: 20px;
+            margin: 0;
         }
         .card { 
             width: 100%; 
@@ -18,17 +20,20 @@
             border: 4px solid #33ff33; 
             padding: 20px; 
             background: #000;
+            box-sizing: border-box;
         }
         h1 { text-align: center; border-bottom: 2px solid #33ff33; padding-bottom: 10px; font-size: 1.5rem; }
         .block { border: 2px solid #33ff33; padding: 15px; margin-bottom: 20px; }
         label { display: block; margin: 10px 0 5px; font-weight: bold; }
         button { 
             background: #33ff33; color: #000; border: none; 
-            padding: 10px; cursor: pointer; font-weight: bold; width: 100%; margin-bottom: 5px;
+            padding: 10px; cursor: pointer; font-weight: bold; width: 100%; margin-bottom: 8px;
+            transition: background 0.2s;
         }
         button:hover { background: #22cc22; }
-        input[type="range"] { width: 100%; margin-bottom: 10px; }
-        select { width: 100%; padding: 5px; background: #000; color: #33ff33; border: 1px solid #33ff33; margin-bottom: 10px; font-family: inherit;}
+        input[type="range"] { width: 100%; margin-bottom: 15px; cursor: pointer; }
+        select { width: 100%; padding: 8px; background: #000; color: #33ff33; border: 1px solid #33ff33; margin-bottom: 10px; font-family: inherit;}
+        .flex-buttons { display: flex; gap: 5px; margin-bottom: 10px; }
     </style>
 </head>
 <body>
@@ -38,7 +43,7 @@
 
     <div class="block" style="border-color: #ffaa00;">
         <h3 style="color: #ffaa00; margin-top: 0;">[RUTEO DE SALIDA]</h3>
-        <button onclick="detectarSalidas()" style="background:#ffaa00;">ESCANEAR DISPOSITIVOS DE AUDIO</button>
+        <button onclick="detectarSalidas()" style="background:#ffaa00;">ESCANEAR DISPOSITIVOS</button>
         <label>SALIDA SELECCIONADA:</label>
         <select id="audioOutput" onchange="cambiarSalida(this.value)">
             <option value="default">Salida Predeterminada del Sistema</option>
@@ -53,8 +58,8 @@
             <option value="sawtooth">SIERRA</option>
         </select>
         <label>FREC: <span id="fVal">440</span> Hz</label>
-        <input type="range" id="freqRange" min="20" max="2000" value="440">
-        <label>VOL OSC: <span id="vOscVal">0.1</span></label>
+        <input type="range" id="freqRange" min="20" max="20000" value="440">
+        <label>VOL OSC: <span id="vOscVal">10</span>%</label>
         <input type="range" id="volOsc" min="0" max="100" value="10">
         <button onclick="toggleOsc()">INICIAR / DETENER TONE</button>
         <button onclick="startSweep()" style="background:#ffaa00;">AUTO BARRIDO (SWEEP)</button>
@@ -62,71 +67,91 @@
 
     <div class="block">
         <h3 style="margin-top: 0;">[GEN_RUIDO]</h3>
-        <div style="display: flex; gap: 5px; margin-bottom: 10px;">
+        <div class="flex-buttons">
             <button onclick="playNoise('white')">BLANCO</button>
             <button onclick="playNoise('pink')">ROSA</button>
-            <button onclick="playNoise('brown')">CAFE</button>
+            <button onclick="playNoise('brown')">CAFÉ</button>
         </div>
-        <label>VOL RUIDO: <span id="vNoiseVal">0.1</span></label>
+        <label>VOL RUIDO: <span id="vNoiseVal">10</span>%</label>
         <input type="range" id="volNoise" min="0" max="100" value="10">
         <button onclick="stopAllNoise()" style="background:#ff3333; color: white;">STOP NOISE</button>
     </div>
 </div>
 
 <script>
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    let osc = null, oscGain = ctx.createGain(), noiseNode = null, noiseGain = ctx.createGain();
-    
-    // Nodos maestros de volumen
-    oscGain.gain.value = 0.1;
-    noiseGain.gain.value = 0.1;
-    oscGain.connect(ctx.destination);
-    noiseGain.connect(ctx.destination);
+    // Variables globales
+    let ctx = null;
+    let osc = null, oscGain = null;
+    let noiseNode = null, noiseGain = null;
+    let sweepInterval = null;
 
-    // --- Ruteo de Audio ---
+    // Inicialización segura del motor de audio (Se llama solo tras el primer clic)
+    function initAudio() {
+        if (!ctx) {
+            ctx = new (window.AudioContext || window.webkitAudioContext)();
+            
+            // Crear nodos maestros de ganancia
+            oscGain = ctx.createGain();
+            noiseGain = ctx.createGain();
+            
+            // Asignar volumen inicial de los sliders
+            oscGain.gain.value = document.getElementById('volOsc').value / 100;
+            noiseGain.gain.value = document.getElementById('volNoise').value / 100;
+            
+            // Conectar a la salida principal
+            oscGain.connect(ctx.destination);
+            noiseGain.connect(ctx.destination);
+        }
+        // Desbloquear el contexto si el navegador lo suspendió
+        if (ctx.state === 'suspended') {
+            ctx.resume();
+        }
+    }
+
+    // --- Ruteo de Audio Seguro ---
     async function detectarSalidas() {
         try {
-            // Se solicita permiso de micrófono brevemente para que el navegador revele los nombres reales de las salidas
             await navigator.mediaDevices.getUserMedia({ audio: true });
             const devices = await navigator.mediaDevices.enumerateDevices();
             const audioOutputs = devices.filter(device => device.kind === 'audiooutput');
             
             const select = document.getElementById('audioOutput');
-            select.innerHTML = '<option value="default">Salida Predeterminada</option>'; // Reset
+            select.innerHTML = '<option value="default">Salida Predeterminada</option>';
             
             audioOutputs.forEach(device => {
                 if (device.deviceId !== 'default' && device.deviceId !== 'communications') {
                     const option = document.createElement('option');
                     option.value = device.deviceId;
-                    option.text = device.label || `Salida desconocida (${device.deviceId.slice(0,5)}...)`;
+                    option.text = device.label || `Salida (${device.deviceId.slice(0,5)}...)`;
                     select.appendChild(option);
                 }
             });
-            alert("Dispositivos de audio actualizados. Selecciona tu salida en el menú.");
         } catch (err) {
-            console.error("Error al acceder a los dispositivos:", err);
-            alert("Para ver los nombres de las bocinas, el navegador necesita permiso de audio/micrófono.");
+            console.warn("Permiso de micrófono denegado o no soportado.", err);
+            alert("No se pudo escanear. Asegúrate de dar permisos de micrófono en el navegador si deseas ver las salidas específicas.");
         }
     }
 
     async function cambiarSalida(deviceId) {
+        initAudio(); // Asegurar que el contexto existe
         if (typeof ctx.setSinkId === 'function') {
             try {
                 await ctx.setSinkId(deviceId);
-                console.log(`Audio ruteado al dispositivo: ${deviceId}`);
             } catch (err) {
-                console.error("Error al rutear el audio:", err);
+                console.error("Error al rutear:", err);
             }
-        } else {
-            alert("Tu navegador no soporta ruteo manual (setSinkId). Usa Chrome o Edge para esta función.");
         }
     }
 
     // --- Generadores ---
     function toggleOsc() {
-        if (ctx.state === 'suspended') ctx.resume();
-        if (osc) { osc.stop(); osc = null; } 
-        else {
+        initAudio();
+        if (sweepInterval) clearInterval(sweepInterval);
+
+        if (osc) { 
+            osc.stop(); 
+            osc = null; 
+        } else {
             osc = ctx.createOscillator();
             osc.type = document.getElementById('oscType').value;
             osc.frequency.value = document.getElementById('freqRange').value;
@@ -136,33 +161,88 @@
     }
 
     function startSweep() {
-        if (ctx.state === 'suspended') ctx.resume();
-        if (!osc) toggleOsc();
+        initAudio();
+        if (sweepInterval) clearInterval(sweepInterval);
+        
+        if (!osc) {
+            osc = ctx.createOscillator();
+            osc.type = document.getElementById('oscType').value;
+            osc.connect(oscGain);
+            osc.start();
+        }
+        
         let freq = 20;
-        let interval = setInterval(() => {
-            freq += 10;
+        document.getElementById('freqRange').value = freq;
+        
+        sweepInterval = setInterval(() => {
+            freq += 20; // Velocidad del barrido
             if (freq > 20000 || !osc) {
-                clearInterval(interval);
+                clearInterval(sweepInterval);
             } else { 
-                osc.frequency.value = freq; 
+                osc.frequency.setValueAtTime(freq, ctx.currentTime);
                 document.getElementById('freqRange').value = freq;
                 document.getElementById('fVal').innerText = freq; 
             }
-        }, 50);
+        }, 20);
     }
 
     function playNoise(type) {
-        if (ctx.state === 'suspended') ctx.resume();
+        initAudio();
         stopAllNoise();
-        const buf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
+        
+        const bufferSize = ctx.sampleRate * 2;
+        const buf = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
         const data = buf.getChannelData(0);
         let b = [0,0,0,0,0,0,0];
         
         for (let i = 0; i < buf.length; i++) {
             let w = Math.random() * 2 - 1;
-            if (type === 'white') data[i] = w;
-            else if (type === 'pink') {
+            if (type === 'white') {
+                data[i] = w;
+            } else if (type === 'pink') {
                 b[0] = 0.99886*b[0] + w*0.0555179;
                 b[1] = 0.99332*b[1] + w*0.0750759;
                 b[2] = 0.96900*b[2] + w*0.1538520;
-                b[3] = 0.86
+                b[3] = 0.86650*b[3] + w*0.3104856;
+                b[4] = 0.55000*b[4] + w*0.5329522;
+                b[5] = -0.7616*b[5] - w*0.0168980;
+                data[i] = (b[0]+b[1]+b[2]+b[3]+b[4]+b[5]+b[6]+w*0.5362)*0.11;
+                b[6] = w*0.115926;
+            } else if (type === 'brown') {
+                data[i] = (Math.random() * 2 - 1) * 0.1;
+            }
+        }
+        
+        noiseNode = ctx.createBufferSource();
+        noiseNode.buffer = buf; 
+        noiseNode.loop = true;
+        noiseNode.connect(noiseGain);
+        noiseNode.start();
+    }
+
+    function stopAllNoise() { 
+        if (noiseNode) { 
+            noiseNode.stop(); 
+            noiseNode.disconnect();
+            noiseNode = null; 
+        } 
+    }
+
+    // --- Listeners de Controles UI ---
+    document.getElementById('freqRange').addEventListener('input', (e) => { 
+        document.getElementById('fVal').innerText = e.target.value; 
+        if (ctx && osc) osc.frequency.setValueAtTime(e.target.value, ctx.currentTime); 
+    });
+    
+    document.getElementById('volOsc').addEventListener('input', (e) => { 
+        document.getElementById('vOscVal').innerText = e.target.value;
+        if (ctx && oscGain) oscGain.gain.setValueAtTime(e.target.value / 100, ctx.currentTime); 
+    });
+    
+    document.getElementById('volNoise').addEventListener('input', (e) => { 
+        document.getElementById('vNoiseVal').innerText = e.target.value;
+        if (ctx && noiseGain) noiseGain.gain.setValueAtTime(e.target.value / 100, ctx.currentTime); 
+    });
+</script>
+</body>
+</html>
