@@ -2,61 +2,321 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Simulador de Especialidades - Retro Mode</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulador de Especialidades - Ingeniería en Sonido</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        body { background-color: #0d0d0d; color: #00ff00; font-family: 'Courier New', Courier, monospace; padding: 20px; }
-        .container { max-width: 800px; margin: auto; border: 1px solid #00ff00; padding: 20px; }
-        button { background: #000; color: #00ff00; border: 1px solid #00ff00; padding: 10px; cursor: pointer; margin: 5px; }
-        button:hover { background: #00ff00; color: #000; }
-        canvas { margin-top: 20px; }
+        :root {
+            --refuerzo-color: #FF6B6B;
+            --acustica-color: #FFD93D;
+            --desarrollo-color: #4D96FF;
+            --bg-color: #f4f7f6;
+            --card-bg: #ffffff;
+            --text-main: #2c3e50;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        /* Sección de Votación */
+        .votacion-container {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-bottom: 40px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            padding: 15px 30px;
+            font-size: 1.1em;
+            font-weight: bold;
+            color: #1a1a1a;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+        }
+
+        .btn-refuerzo { background-color: var(--refuerzo-color); color: white; }
+        .btn-acustica { background-color: var(--acustica-color); }
+        .btn-desarrollo { background-color: var(--desarrollo-color); color: white; }
+        .btn-reset { background-color: #95a5a6; color: white; margin-top: 20px;}
+
+        /* Grid del Dashboard */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+        }
+
+        .card h2 {
+            margin-top: 0;
+            font-size: 1.4em;
+            border-bottom: 2px solid var(--bg-color);
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+
+        /* Texto y Datos */
+        .datos-lista {
+            list-style: none;
+            padding: 0;
+            font-size: 1.2em;
+        }
+        
+        .datos-lista li {
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            border-bottom: 1px dashed #ccc;
+            padding-bottom: 5px;
+        }
+
+        .interpretacion-texto {
+            font-size: 1.1em;
+            line-height: 1.6;
+            text-align: justify;
+        }
+
+        /* Contenedores de Gráficos */
+        .chart-container {
+            position: relative;
+            height: 300px;
+            width: 100%;
+        }
+
+        .chart-container.large {
+            height: 400px;
+        }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>> ANALISIS_ESPECIALIDADES.exe</h1>
-        <p>Seleccione su especialidad de interés:</p>
-        <button onclick="votar('Refuerzo')">REFUERZO SONORO</button>
-        <button onclick="votar('Acustica')">ACUSTICA</button>
-        <button onclick="votar('Desarrollo')">DESARROLLO (SW/HW)</button>
-        
-        <canvas id="barChart"></canvas>
-        <canvas id="pieChart"></canvas>
-        <canvas id="polarChart"></canvas>
+
+<div class="container">
+    <h1>Dashboard de Especialidades en Sonido</h1>
+
+    <div class="votacion-container">
+        <button class="btn-refuerzo" onclick="votar('Refuerzo')">Votar: Refuerzo Sonoro</button>
+        <button class="btn-acustica" onclick="votar('Acustica')">Votar: Acústica</button>
+        <button class="btn-desarrollo" onclick="votar('Desarrollo')">Votar: Desarrollo HW/SW</button>
     </div>
 
-    <script>
-        let votos = JSON.parse(localStorage.getItem('votos')) || { Refuerzo: 0, Acustica: 0, Desarrollo: 0 };
+    <div class="dashboard-grid">
+        <div class="card">
+            <h2>Datos Acumulados</h2>
+            <ul class="datos-lista">
+                <li><span>Refuerzo Sonoro:</span> <strong id="dato-refuerzo">0</strong></li>
+                <li><span>Acústica / Electroacústica:</span> <strong id="dato-acustica">0</strong></li>
+                <li><span>Desarrollo (Soft/Hard):</span> <strong id="dato-desarrollo">0</strong></li>
+                <li style="border-top: 2px solid #333; margin-top: 15px; padding-top: 10px;">
+                    <span><strong>Total de Votos:</strong></span> <strong id="dato-total">0</strong>
+                </li>
+            </ul>
+        </div>
 
-        function votar(opcion) {
-            votos[opcion]++;
-            localStorage.setItem('votos', JSON.stringify(votos));
-            actualizarGraficos();
+        <div class="card">
+            <h2>Interpretación Analítica</h2>
+            <p class="interpretacion-texto" id="texto-interpretacion">
+                Esperando datos para generar el análisis...
+            </p>
+        </div>
+    </div>
+
+    <div class="dashboard-grid">
+        <div class="card">
+            <h2>Volumen Absoluto (Barras)</h2>
+            <div class="chart-container large">
+                <canvas id="barChart"></canvas>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Distribución Proporcional (Pastel)</h2>
+            <div class="chart-container large">
+                <canvas id="pieChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div class="dashboard-grid" style="grid-template-columns: 1fr; max-width: 600px; margin: 0 auto;">
+        <div class="card">
+            <h2>Magnitud de Saturación (Área Polar)</h2>
+            <div class="chart-container">
+                <canvas id="polarChart"></canvas>
+            </div>
+        </div>
+    </div>
+    
+    <div style="text-align: center;">
+        <button class="btn-reset" onclick="reiniciarDatos()">Reiniciar Todos los Datos</button>
+    </div>
+</div>
+
+<script>
+    // Variables Globales de Votos (Persistencia)
+    let votos = {
+        Refuerzo: parseInt(localStorage.getItem('votosRefuerzo')) || 0,
+        Acustica: parseInt(localStorage.getItem('votosAcustica')) || 0,
+        Desarrollo: parseInt(localStorage.getItem('votosDesarrollo')) || 0
+    };
+
+    // Referencias a los Gráficos
+    let barChart, pieChart, polarChart;
+
+    // Colores globales
+    const colores = ['#FF6B6B', '#FFD93D', '#4D96FF'];
+    const bordes = ['#c0392b', '#f39c12', '#2980b9'];
+    const etiquetas = ['Refuerzo Sonoro', 'Acústica', 'Desarrollo SW/HW'];
+
+    // Inicialización al cargar la página
+    window.onload = function() {
+        inicializarGraficos();
+        actualizarInterfaz();
+    };
+
+    // Función para registrar un voto
+    function votar(especialidad) {
+        votos[especialidad]++;
+        localStorage.setItem(`votos${especialidad}`, votos[especialidad]);
+        actualizarInterfaz();
+    }
+
+    // Función para reiniciar
+    function reiniciarDatos() {
+        if(confirm("¿Estás seguro de que quieres borrar todos los votos?")) {
+            votos = { Refuerzo: 0, Acustica: 0, Desarrollo: 0 };
+            localStorage.clear();
+            actualizarInterfaz();
         }
+    }
 
-        const config = (type) => ({
-            type: type,
-            data: {
-                labels: ['Refuerzo Sonoro', 'Acústica', 'Desarrollo'],
-                datasets: [{ label: 'Votos', data: [votos.Refuerzo, votos.Acustica, votos.Desarrollo], backgroundColor: ['#00ff00', '#008800', '#004400'] }]
-            }
+    // Función Central para actualizar toda la UI
+    function actualizarInterfaz() {
+        const dataArr = [votos.Refuerzo, votos.Acustica, votos.Desarrollo];
+        const total = dataArr.reduce((a, b) => a + b, 0);
+
+        // 1. Actualizar Textos Numéricos
+        document.getElementById('dato-refuerzo').innerText = votos.Refuerzo;
+        document.getElementById('dato-acustica').innerText = votos.Acustica;
+        document.getElementById('dato-desarrollo').innerText = votos.Desarrollo;
+        document.getElementById('dato-total').innerText = total;
+
+        // 2. Actualizar Gráficos
+        [barChart, pieChart, polarChart].forEach(chart => {
+            chart.data.datasets[0].data = dataArr;
+            chart.update();
         });
 
-        let charts = [
-            new Chart(document.getElementById('barChart'), config('bar')),
-            new Chart(document.getElementById('pieChart'), config('pie')),
-            new Chart(document.getElementById('polarChart'), config('polarArea'))
+        // 3. Generar Interpretación Escrita Dinámica
+        generarInterpretacion(total);
+    }
+
+    // Lógica para redactar el análisis
+    function generarInterpretacion(total) {
+        const textoDiv = document.getElementById('texto-interpretacion');
+        
+        if (total === 0) {
+            textoDiv.innerHTML = "<em>El sistema está a la espera de los primeros votos para comenzar el cálculo probabilístico.</em>";
+            return;
+        }
+
+        // Crear un array de objetos para ordenar fácilmente
+        let stats = [
+            { nombre: 'Refuerzo Sonoro', cantidad: votos.Refuerzo },
+            { nombre: 'Acústica', cantidad: votos.Acustica },
+            { nombre: 'Desarrollo de Hardware y Software', cantidad: votos.Desarrollo }
         ];
 
-        function actualizarGraficos() {
-            charts.forEach(chart => {
-                chart.data.datasets[0].data = [votos.Refuerzo, votos.Acustica, votos.Desarrollo];
-                chart.update();
-            });
+        // Ordenar de mayor a menor
+        stats.sort((a, b) => b.cantidad - a.cantidad);
+
+        const mayor = stats[0];
+        const menor = stats[2];
+        const intermedio = stats[1];
+
+        let analisis = `Con una cohorte actual de <strong>${total}</strong> participaciones registradas, observamos una clara tendencia. `;
+        
+        analisis += `La especialidad con <strong>mayor demanda</strong> es <strong>${mayor.nombre}</strong> con ${mayor.cantidad} votos, `;
+        analisis += `lo que confirma la hipótesis de saturación en áreas de alta visibilidad. `;
+        
+        analisis += `<br><br>Por otro lado, la especialidad <strong>menos explorada</strong> es <strong>${menor.nombre}</strong> con apenas ${menor.cantidad} votos, evidenciando el déficit técnico mencionado en la investigación. `;
+        
+        analisis += `El área de ${intermedio.nombre} se mantiene como una opción intermedia con ${intermedio.cantidad} interesados.`;
+
+        // Caso de empates (opcional para hacerlo más robusto)
+        if (mayor.cantidad === menor.cantidad) {
+            analisis = `Actualmente existe un equilibrio perfecto en la muestra, con ${total} votos distribuidos uniformemente entre las ramas. Se requieren más datos para definir una tendencia.`;
         }
-    </script>
+
+        textoDiv.innerHTML = analisis;
+    }
+
+    // Configuración Inicial de Chart.js
+    function inicializarGraficos() {
+        const ctxBar = document.getElementById('barChart').getContext('2d');
+        const ctxPie = document.getElementById('pieChart').getContext('2d');
+        const ctxPolar = document.getElementById('polarChart').getContext('2d');
+
+        const configBase = {
+            labels: etiquetas,
+            datasets: [{
+                data: [0, 0, 0],
+                backgroundColor: colores,
+                borderColor: bordes,
+                borderWidth: 1
+            }]
+        };
+
+        barChart = new Chart(ctxBar, {
+            type: 'bar',
+            data: JSON.parse(JSON.stringify(configBase)),
+            options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } }, plugins: { legend: { display: false } } }
+        });
+
+        pieChart = new Chart(ctxPie, {
+            type: 'pie',
+            data: JSON.parse(JSON.stringify(configBase)),
+            options: { responsive: true, maintainAspectRatio: false }
+        });
+
+        polarChart = new Chart(ctxPolar, {
+            type: 'polarArea',
+            data: JSON.parse(JSON.stringify(configBase)),
+            options: { responsive: true, maintainAspectRatio: false }
+        });
+    }
+</script>
+
 </body>
 </html>
-
-
- 
